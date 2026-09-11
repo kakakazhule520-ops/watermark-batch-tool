@@ -7,7 +7,7 @@ import shutil
 import zipfile
 import threading
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -17,8 +17,8 @@ from tkinter import scrolledtext
 class WatermarkGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("🎨 批量图片水印工具 v1.0")
-        self.root.geometry("800x900")
+        self.root.title("🎨 批量图片水印工具 v2.0 - 图片水印版")
+        self.root.geometry("900x900")
         self.root.resizable(True, True)
         
         # 设置样式
@@ -26,13 +26,16 @@ class WatermarkGUI:
         style.theme_use('clam')
         
         self.supported_formats = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp']
-        self.watermark_styles = {
-            '紧迫感': {'position': 'bottom_right', 'color': (255, 0, 0), 'angle': 0},
-            '优雅感': {'position': 'center', 'color': (200, 200, 200), 'angle': -45},
-            '警告感': {'position': 'top_left', 'color': (255, 255, 0), 'angle': 0},
-            '品牌感': {'position': 'bottom_center', 'color': (100, 100, 100), 'angle': 0}
+        self.watermark_position = {
+            '右下角': 'bottom_right',
+            '左下角': 'bottom_left',
+            '右上角': 'top_right',
+            '左上角': 'top_left',
+            '中心': 'center'
         }
         
+        self.watermark_image = None
+        self.watermark_path = None
         self.setup_ui()
     
     def setup_ui(self):
@@ -41,7 +44,7 @@ class WatermarkGUI:
         title_frame = ttk.Frame(self.root)
         title_frame.pack(fill=tk.X, padx=20, pady=10)
         
-        title_label = tk.Label(title_frame, text="🎨 批量图片水印工具", font=("Arial", 18, "bold"))
+        title_label = tk.Label(title_frame, text="🎨 批量图片水印工具 - 图片水印版", font=("Arial", 18, "bold"))
         title_label.pack(side=tk.LEFT)
         
         # 主容器
@@ -66,54 +69,53 @@ class WatermarkGUI:
         output_btn.grid(row=2, column=1, sticky=tk.E, pady=5)
         ttk.Label(left_frame, textvariable=self.output_var, foreground="blue").grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=3)
         
-        # 水印文字
-        ttk.Label(left_frame, text="📝 水印文字：", font=("Arial", 10, "bold")).grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.watermark_text = ttk.Entry(left_frame, width=30)
-        self.watermark_text.insert(0, f"© {datetime.now().year}")
-        self.watermark_text.grid(row=4, column=1, sticky=tk.EW, pady=5)
+        # 水印图片选择
+        ttk.Label(left_frame, text="🖼️  水印图片：", font=("Arial", 10, "bold")).grid(row=4, column=0, sticky=tk.W, pady=5)
+        self.watermark_var = tk.StringVar(value="未选择水印图片...")
+        watermark_btn = ttk.Button(left_frame, text="🔍 选择", command=self.select_watermark_image)
+        watermark_btn.grid(row=4, column=1, sticky=tk.E, pady=5)
+        ttk.Label(left_frame, textvariable=self.watermark_var, foreground="green").grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=3)
         
-        # 水印样式
-        ttk.Label(left_frame, text="🎨 水印样式：", font=("Arial", 10, "bold")).grid(row=5, column=0, sticky=tk.W, pady=5)
-        self.style_var = tk.StringVar(value="紧迫感")
-        style_combo = ttk.Combobox(left_frame, textvariable=self.style_var, 
-                                   values=list(self.watermark_styles.keys()), state="readonly", width=27)
-        style_combo.grid(row=5, column=1, sticky=tk.EW, pady=5)
+        # 水印位置
+        ttk.Label(left_frame, text="🎯 水印位置：", font=("Arial", 10, "bold")).grid(row=6, column=0, sticky=tk.W, pady=5)
+        self.position_var = tk.StringVar(value="右下角")
+        position_combo = ttk.Combobox(left_frame, textvariable=self.position_var, 
+                                      values=list(self.watermark_position.keys()), state="readonly", width=27)
+        position_combo.grid(row=6, column=1, sticky=tk.EW, pady=5)
         
-        # 水印大小
-        ttk.Label(left_frame, text="📋 水印大小：", font=("Arial", 10, "bold")).grid(row=6, column=0, sticky=tk.W, pady=5)
+        # 水印大小（比例）
+        ttk.Label(left_frame, text="📏 水印大小(%)：", font=("Arial", 10, "bold")).grid(row=7, column=0, sticky=tk.W, pady=5)
         size_frame = ttk.Frame(left_frame)
-        size_frame.grid(row=6, column=1, sticky=tk.EW, pady=5)
+        size_frame.grid(row=7, column=1, sticky=tk.EW, pady=5)
         
-        self.size_var = tk.StringVar(value="50")
-        size_combo = ttk.Combobox(size_frame, textvariable=self.size_var, 
-                                  values=["30 (小)", "50 (中)", "80 (大)"], state="readonly", width=12)
-        size_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.size_var = tk.StringVar(value="20")
+        size_spin = ttk.Spinbox(size_frame, from_=5, to=100, textvariable=self.size_var, width=10)
+        size_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        ttk.Label(size_frame, text="px").pack(side=tk.LEFT, padx=5)
+        ttk.Label(size_frame, text="% (相对图片宽度)").pack(side=tk.LEFT, padx=5)
         
-        # 透明度
-        ttk.Label(left_frame, text="💧 透明度：", font=("Arial", 10, "bold")).grid(row=7, column=0, sticky=tk.W, pady=5)
+        # 水印透明度
+        ttk.Label(left_frame, text="💧 透明度：", font=("Arial", 10, "bold")).grid(row=8, column=0, sticky=tk.W, pady=5)
         alpha_frame = ttk.Frame(left_frame)
-        alpha_frame.grid(row=7, column=1, sticky=tk.EW, pady=5)
+        alpha_frame.grid(row=8, column=1, sticky=tk.EW, pady=5)
         
-        self.alpha_var = tk.StringVar(value="179")
-        alpha_combo = ttk.Combobox(alpha_frame, textvariable=self.alpha_var, 
-                                   values=["128 (低)", "179 (中)", "230 (高)"], state="readonly", width=12)
-        alpha_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.alpha_var = tk.StringVar(value="100")
+        alpha_spin = ttk.Spinbox(alpha_frame, from_=0, to=100, textvariable=self.alpha_var, width=10)
+        alpha_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        ttk.Label(alpha_frame, text="(0-255)").pack(side=tk.LEFT, padx=5)
+        ttk.Label(alpha_frame, text="% (0=完全透明, 100=完全不透明)").pack(side=tk.LEFT, padx=5)
         
         # 输出格式
-        ttk.Label(left_frame, text="🖼️  输出格式：", font=("Arial", 10, "bold")).grid(row=8, column=0, sticky=tk.W, pady=5)
+        ttk.Label(left_frame, text="🖼️  输出格式：", font=("Arial", 10, "bold")).grid(row=9, column=0, sticky=tk.W, pady=5)
         self.format_var = tk.StringVar(value="原格式")
         format_combo = ttk.Combobox(left_frame, textvariable=self.format_var, 
                                     values=["PNG", "JPG", "原格式"], state="readonly", width=27)
-        format_combo.grid(row=8, column=1, sticky=tk.EW, pady=5)
+        format_combo.grid(row=9, column=1, sticky=tk.EW, pady=5)
         
         # 跳过第一张
         self.skip_first_var = tk.BooleanVar(value=True)
         skip_cb = ttk.Checkbutton(left_frame, text="⏭️  跳过每个文件夹的第一张图片", variable=self.skip_first_var)
-        skip_cb.grid(row=9, column=0, columnspan=2, sticky=tk.W, pady=5)
+        skip_cb.grid(row=10, column=0, columnspan=2, sticky=tk.W, pady=5)
         
         # 右侧日志面板
         right_frame = ttk.LabelFrame(main_frame, text="📋 处理日志", padding=15)
@@ -143,7 +145,7 @@ class WatermarkGUI:
         left_frame.columnconfigure(1, weight=1)
     
     def log(self, message):
-        """添加日志消息"""
+        """添加日志信息"""
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
         self.root.update()
@@ -162,61 +164,65 @@ class WatermarkGUI:
             self.output_var.set(folder)
             self.log(f"✅ 已选择输出文件夹: {folder}")
     
-    def get_watermark_settings(self):
-        """获取水印设置"""
-        size_str = self.size_var.get().split()[0]
-        alpha_str = self.alpha_var.get().split()[0]
-        
-        return {
-            'text': self.watermark_text.get(),
-            'font_size': int(size_str),
-            'alpha': int(alpha_str),
-            'style': self.style_var.get(),
-            'output_format': None if self.format_var.get() == "原格式" else self.format_var.get().lower(),
-            'skip_first': self.skip_first_var.get()
-        }
-    
-    def add_watermark(self, image_path, output_path, watermark_settings):
-        """给图片添加水印"""
-        try:
-            img = Image.open(image_path).convert('RGBA')
-            txt_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
-            txt_draw = ImageDraw.Draw(txt_layer)
-            
-            config = self.watermark_styles[watermark_settings['style']]
-            
-            font_size = watermark_settings['font_size']
+    def select_watermark_image(self):
+        """选择水印图片"""
+        file_path = filedialog.askopenfilename(
+            title="选择水印图片",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.bmp *.gif *.webp"), ("All files", "*.*")]
+        )
+        if file_path:
             try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-            except:
-                try:
-                    font = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf", font_size)
-                except:
-                    font = ImageFont.load_default()
-            
-            text = watermark_settings['text']
-            bbox = txt_draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-            
+                self.watermark_image = Image.open(file_path).convert('RGBA')
+                self.watermark_path = file_path
+                self.watermark_var.set(f"✅ 已选择: {os.path.basename(file_path)}")
+                self.log(f"✅ 水印图片已加载: {file_path}")
+            except Exception as e:
+                messagebox.showerror("错误", f"处理图片失败: {e}")
+                self.log(f"❌ 图片有效检验失败: {e}")
+    
+    def add_watermark_image(self, image_path, output_path, watermark_settings):
+        """给图片添加水印图片"""
+        try:
+            # 打开原图片
+            img = Image.open(image_path).convert('RGBA')
             img_width, img_height = img.size
+            
+            # 水印图片大小
+            watermark_size_percent = watermark_settings['size'] / 100.0
+            watermark_width = int(img_width * watermark_size_percent)
+            
+            # 按比例缩放水印
+            watermark = self.watermark_image.copy()
+            watermark_height = int(watermark.height * (watermark_width / watermark.width))
+            watermark = watermark.resize((watermark_width, watermark_height), Image.Resampling.LANCZOS)
+            
+            # 水印透明度
+            alpha = watermark.split()[3]
+            alpha = alpha.point(lambda p: int(p * watermark_settings['alpha'] / 100))
+            watermark.putalpha(alpha)
+            
+            # 确定水印位置
+            position = watermark_settings['position']
+            padding = 10
+            
             position_map = {
-                'top_left': (10, 10),
-                'top_right': (img_width - text_width - 10, 10),
-                'bottom_left': (10, img_height - text_height - 10),
-                'bottom_right': (img_width - text_width - 10, img_height - text_height - 10),
-                'center': ((img_width - text_width) // 2, (img_height - text_height) // 2),
-                'bottom_center': ((img_width - text_width) // 2, img_height - text_height - 10)
+                'bottom_right': (img_width - watermark_width - padding, img_height - watermark_height - padding),
+                'bottom_left': (padding, img_height - watermark_height - padding),
+                'top_right': (img_width - watermark_width - padding, padding),
+                'top_left': (padding, padding),
+                'center': ((img_width - watermark_width) // 2, (img_height - watermark_height) // 2)
             }
             
-            position = position_map.get(config['position'], position_map['bottom_right'])
-            color = config['color'] + (watermark_settings['alpha'],)
-            txt_draw.text(position, text, font=font, fill=color)
+            pos = position_map.get(position, position_map['bottom_right'])
             
-            img = Image.alpha_composite(img, txt_layer)
+            # 合并图层
+            img.paste(watermark, pos, watermark)
+            
+            # 转换回 RGB
             if img.mode == 'RGBA':
                 img = img.convert('RGB')
             
+            # 保存图片
             output_format = watermark_settings['output_format']
             if output_format:
                 output_path = os.path.splitext(output_path)[0] + f'.{output_format}'
@@ -258,7 +264,7 @@ class WatermarkGUI:
                 continue
             
             output_path = os.path.join(temp_folder, image_file.name)
-            status = self.add_watermark(str(image_file), output_path, watermark_settings)
+            status = self.add_watermark_image(str(image_file), output_path, watermark_settings)
             
             if status:
                 processed_count += 1
@@ -286,8 +292,16 @@ class WatermarkGUI:
         source = self.source_var.get()
         output = self.output_var.get()
         
-        if source == "选择包含图片的文件夹..." or output == "选择输出文件夹...":
-            messagebox.showerror("错误", "请先选择源文件夹和输出文件夹！")
+        if source == "选择包含图片的文件夹...":
+            messagebox.showerror("错误", "请先选择源文件夹！")
+            return
+        
+        if output == "选择输出文件夹...":
+            messagebox.showerror("错误", "请先选择输出文件夹！")
+            return
+        
+        if self.watermark_image is None:
+            messagebox.showerror("错误", "请先选择水印图片！")
             return
         
         if not os.path.isdir(source):
@@ -312,7 +326,13 @@ class WatermarkGUI:
             self.log("🚀 开始处理")
             self.log("="*50)
             
-            watermark_settings = self.get_watermark_settings()
+            watermark_settings = {
+                'size': int(self.size_var.get()),
+                'alpha': int(self.alpha_var.get()),
+                'position': self.watermark_position[self.position_var.get()],
+                'output_format': None if self.format_var.get() == "原格式" else self.format_var.get().lower(),
+                'skip_first': self.skip_first_var.get()
+            }
             
             # 检查源是否是单个文件夹还是包含多个文件夹
             folders_to_process = []
