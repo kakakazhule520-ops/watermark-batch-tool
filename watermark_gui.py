@@ -80,7 +80,7 @@ class WatermarkGUI:
         style_combo.grid(row=5, column=1, sticky=tk.EW, pady=5)
         
         # 水印大小
-        ttk.Label(left_frame, text="📏 水印大小：", font=("Arial", 10, "bold")).grid(row=6, column=0, sticky=tk.W, pady=5)
+        ttk.Label(left_frame, text="📋 水印大小：", font=("Arial", 10, "bold")).grid(row=6, column=0, sticky=tk.W, pady=5)
         size_frame = ttk.Frame(left_frame)
         size_frame.grid(row=6, column=1, sticky=tk.EW, pady=5)
         
